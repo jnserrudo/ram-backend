@@ -1,0 +1,392 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id            Int      @id @default(autoincrement())
+  dni           String   @unique
+  celular       String
+  email         String
+  nombre        String
+  apellido      String
+  password_hash String
+  rol           Rol      @default(USER)
+  creditos      Int      @default(0)
+  activo               Boolean  @default(true)
+  requiereCambioPassword Boolean @default(false)
+  codigoReferido       String   @unique @default(cuid())
+  referidoPor          String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  reservas      Reserva[]
+  asistencias   Asistencia[]
+  compras       CompraCredito[]
+  notificaciones Notificacion[]
+  logros        Logro[]
+  referidos     Referido[]
+  planes        PlanEntrenamiento[]
+  actividades   RegistroActividad[]
+
+  @@map("usuarios")
+}
+
+enum Rol {
+  USER
+  ADMIN
+}
+
+model SolicitudInscripcion {
+  id        Int       @id @default(autoincrement())
+  nombre    String
+  apellido  String
+  dni       String
+  celular   String
+  email     String
+  estado    EstadoSolicitud @default(PENDIENTE)
+  createdAt DateTime  @default(now())
+
+  @@map("solicitudes")
+}
+
+enum EstadoSolicitud {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+}
+
+model TipoClase {
+  id          Int       @id @default(autoincrement())
+  titulo      String
+  descripcion String
+  activo      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  horarios    Horario[]
+
+  @@map("tipos_clase")
+}
+
+model Horario {
+  id          Int       @id @default(autoincrement())
+  tipoClaseId Int
+  diaSemana   Int       // 0=Domingo, 1=Lunes...
+  horaInicio  Int
+  bloque      Bloque
+  cupoMaximo  Int       @default(12)
+  activo      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  tipoClase   TipoClase @relation(fields: [tipoClaseId], references: [id])
+  reservas    Reserva[]
+  asistencias Asistencia[]
+
+  @@map("horarios")
+}
+
+enum Bloque {
+  MANANA
+  TARDE
+  NOCHE
+}
+
+model Reserva {
+  id                  Int           @id @default(autoincrement())
+  usuarioId           Int
+  horarioId           Int
+  fecha               DateTime
+  estado              EstadoReserva @default(RESERVADA)
+  recordatorioEnviado Boolean       @default(false)
+  createdAt           DateTime      @default(now())
+
+  usuario     Usuario       @relation(fields: [usuarioId], references: [id])
+  horario     Horario       @relation(fields: [horarioId], references: [id])
+
+  @@index([usuarioId])
+  @@index([horarioId])
+  @@index([fecha])
+  @@map("reservas")
+}
+
+enum EstadoReserva {
+  RESERVADA
+  ASISTIO
+  NO_ASISTIO
+  CANCELADA
+}
+
+model Asistencia {
+  id               Int       @id @default(autoincrement())
+  usuarioId        Int
+  horarioId        Int
+  fecha            DateTime
+  metodo           MetodoAsistencia
+  creditoConsumido Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+
+  usuario          Usuario   @relation(fields: [usuarioId], references: [id])
+  horario          Horario   @relation(fields: [horarioId], references: [id])
+
+  @@index([usuarioId])
+  @@index([fecha])
+  @@map("asistencias")
+}
+
+enum MetodoAsistencia {
+  RESERVA
+  CHECKIN
+}
+
+model PaqueteCredito {
+  id                Int       @id @default(autoincrement())
+  titulo            String
+  descripcion       String
+  cantidadCreditos  Int
+  precio            Float
+  duracionDias      Int       @default(30)
+  esClaseIndividual Boolean   @default(false)
+  activo            Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+
+  compras           CompraCredito[]
+
+  @@map("paquetes")
+}
+
+enum EstadoCompra {
+  ACTIVO
+  CONSUMIDO
+  VENCIDO
+  CANCELADO
+}
+
+model CompraCredito {
+  id                Int         @id @default(autoincrement())
+  usuarioId         Int
+  paqueteId         Int
+  creditosOtorgados Int
+  creditosConsumidos Int       @default(0)
+  totalPagado       Float
+  fechaPago         DateTime    @default(now())
+  fechaInicio       DateTime    @default(now())
+  fechaVencimiento  DateTime
+  metodoPago        String
+  estado            EstadoCompra @default(ACTIVO)
+  createdAt         DateTime    @default(now())
+
+  usuario         Usuario        @relation(fields: [usuarioId], references: [id])
+  paquete         PaqueteCredito @relation(fields: [paqueteId], references: [id])
+
+  @@map("compras")
+}
+
+model Notificacion {
+  id           Int          @id @default(autoincrement())
+  usuarioId    Int
+  tipo         TipoNotificacion
+  titulo       String
+  mensaje      String
+  leida        Boolean      @default(false)
+  urlOpcional  String?
+  createdAt    DateTime     @default(now())
+
+  usuario      Usuario      @relation(fields: [usuarioId], references: [id])
+
+  @@map("notificaciones")
+}
+
+enum TipoNotificacion {
+  RESERVA
+  CHECKIN
+  CANCELACION
+  RECORDATORIO
+  SISTEMA
+  PAGO
+  APROBACION
+}
+
+model Comunicado {
+  id            Int       @id @default(autoincrement())
+  adminId       Int
+  titulo        String
+  mensaje       String
+  activo        Boolean   @default(true)
+  fechaExpiracion DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@map("comunicados")
+}
+
+model WhatsAppLog {
+  id        Int            @id @default(autoincrement())
+  usuarioId Int?
+  tipo      String
+  telefono  String
+  mensaje   String
+  estado    EstadoWhatsApp @default(PENDIENTE)
+  error     String?
+  createdAt DateTime       @default(now())
+
+  @@map("whatsapp_logs")
+}
+
+enum EstadoWhatsApp {
+  ENVIADO
+  FALLIDO
+  PENDIENTE
+}
+
+model Auditoria {
+  id               Int       @id @default(autoincrement())
+  fechaHora        DateTime  @default(now())
+  usuarioId        Int?
+  usuarioDni       String?
+  accion           AccionAuditoria
+  entidad          EntidadAuditoria
+  entidadId        String?
+  estadoAnterior   Json?
+  estadoPosterior  Json?
+  impacto          Impacto   @default(NINGUNO)
+  observacion      String?
+  ipAddress        String?
+  userAgent        String?
+  createdAt        DateTime  @default(now())
+
+  @@map("auditoria")
+}
+
+enum AccionAuditoria {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  CHECKIN
+  RESERVA
+  CANCELACION
+  COMPRA
+  APROBACION
+  RECHAZO
+  OTRO
+}
+
+enum EntidadAuditoria {
+  USUARIO
+  CLASE
+  HORARIO
+  RESERVA
+  ASISTENCIA
+  COMPRA
+  CREDITO
+  SOLICITUD
+  COMUNICADO
+  PAQUETE
+  SISTEMA
+}
+
+enum Impacto {
+  ALTO
+  MEDIO
+  BAJO
+  NINGUNO
+}
+
+model Logro {
+  id            Int       @id @default(autoincrement())
+  usuarioId     Int
+  tipo          TipoLogro
+  titulo        String
+  descripcion   String
+  icono         String
+  fechaObtenido DateTime  @default(now())
+  
+  usuario       Usuario   @relation(fields: [usuarioId], references: [id])
+  
+  @@map("logros")
+}
+
+enum TipoLogro {
+  ASISTENCIA_5
+  ASISTENCIA_10
+  ASISTENCIA_20
+  ASISTENCIA_50
+  RACHA_SEMANAL
+  PRIMER_MES
+}
+
+model Referido {
+  id                Int            @id @default(autoincrement())
+  usuarioId         Int
+  referidoDni       String
+  referidoNombre    String
+  estado            EstadoReferido @default(PENDIENTE)
+  creditosOtorgados Int            @default(0)
+  fechaRegistro     DateTime       @default(now())
+  
+  usuario           Usuario        @relation(fields: [usuarioId], references: [id])
+  
+  @@map("referidos")
+}
+
+enum EstadoReferido {
+  PENDIENTE
+  COMPLETADO
+}
+
+model PlanEntrenamiento {
+  id          Int       @id @default(autoincrement())
+  usuarioId   Int
+  titulo      String
+  objetivo    String
+  nivel       NivelEntrenamiento
+  activo      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  
+  usuario     Usuario   @relation(fields: [usuarioId], references: [id])
+  ejercicios  EjercicioPlan[]
+  
+  @@map("planes_entrenamiento")
+}
+
+model EjercicioPlan {
+  id            Int       @id @default(autoincrement())
+  planId        Int
+  diaSemana     Int
+  nombre        String
+  series        Int
+  repeticiones  String
+  descanso      String
+  notas         String?
+  orden         Int
+  
+  plan          PlanEntrenamiento @relation(fields: [planId], references: [id], onDelete: Cascade)
+  
+  @@map("ejercicios_plan")
+}
+
+enum NivelEntrenamiento {
+  PRINCIPIANTE
+  INTERMEDIO
+  AVANZADO
+}
+
+model RegistroActividad {
+  id                      Int      @id @default(autoincrement())
+  usuarioId               Int
+  fecha                   DateTime
+  pasos                   Int?
+  caloriasQuemadas        Int?
+  frecuenciaCardiacaPromedio Int?
+  duracionMinutos         Int?
+  fuente                  String   @default("MANUAL")
+  createdAt               DateTime @default(now())
+  
+  usuario                 Usuario  @relation(fields: [usuarioId], references: [id])
+  
+  @@map("registros_actividad")
+}
