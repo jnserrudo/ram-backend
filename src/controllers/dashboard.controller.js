@@ -40,7 +40,7 @@ export const obtenerMetricas = async (req, res) => {
       }),
       prisma.asistencia.groupBy({
         by: ['horarioId'],
-        _count: true,
+        _count: { horarioId: true },
         orderBy: { _count: { horarioId: 'desc' } },
         take: 5
       })
@@ -76,7 +76,7 @@ export const obtenerMetricas = async (req, res) => {
       const h = horariosInfo.find(x => x.id === cp.horarioId);
       return {
         name: h?.tipoClase.titulo || 'Desconocida',
-        value: cp._count
+        value: cp._count.horarioId
       };
     });
 
