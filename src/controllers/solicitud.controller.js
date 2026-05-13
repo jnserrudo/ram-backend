@@ -16,12 +16,44 @@ export const listarSolicitudes = async (req, res) => {
 export const aprobarSolicitud = async (req, res) => {
   try {
     const { id } = req.params;
-    const { estado, codigoReferido } = req.body; // APROBADA o RECHAZADA
+    const { estado, codigoReferido, forzar } = req.body; // APROBADA o RECHAZADA, forzar para duplicados
 
     const solicitud = await prisma.solicitudInscripcion.findUnique({ where: { id: parseInt(id) } });
     if (!solicitud) return res.status(404).json({ error: 'Solicitud no encontrada' });
 
     if (estado === 'APROBADA') {
+      // Verificar si el usuario ya existe por DNI
+      const usuarioExistente = await prisma.usuario.findUnique({
+        where: { dni: solicitud.dni }
+      });
+
+      if (usuarioExistente && !forzar) {
+        return res.status(409).json({ 
+          error: 'DNI Duplicado', 
+          usuario: {
+            id: usuarioExistente.id,
+            nombre: usuarioExistente.nombre,
+            apellido: usuarioExistente.apellido,
+            activo: usuarioExistente.activo
+          }
+        });
+      }
+
+      if (usuarioExistente && forzar) {
+        // Caso: El administrador decidió resolver el duplicado
+        await prisma.usuario.update({
+          where: { id: usuarioExistente.id },
+          data: { activo: true } // Lo reactivamos por las dudas
+        });
+
+        await prisma.solicitudInscripcion.update({
+          where: { id: parseInt(id) },
+          data: { estado: 'APROBADA' }
+        });
+
+        return res.json({ message: 'Usuario existente reactivado y solicitud aprobada.' });
+      }
+
       const passwordDefault = solicitud.dni;
       const hash = await bcrypt.hash(passwordDefault, 10);
 
