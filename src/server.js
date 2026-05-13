@@ -25,6 +25,8 @@ import referidosRoutes from './routes/referidos.routes.js';
 import planesRoutes from './routes/planes.routes.js';
 import actividadRoutes from './routes/actividad.routes.js';
 
+import dashboardRoutes from './routes/dashboard.routes.js';
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -65,6 +67,7 @@ app.use('/api/logros', logrosRoutes);
 app.use('/api/referidos', referidosRoutes);
 app.use('/api/planes', planesRoutes);
 app.use('/api/actividad', actividadRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
