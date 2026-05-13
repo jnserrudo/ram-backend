@@ -36,7 +36,7 @@ export const obtenerMetricas = async (req, res) => {
       }),
       prisma.asistencia.findMany({
         where: { createdAt: { gte: hace4Semanas } },
-        select: { createdAt: true }
+        include: { horario: { include: { tipoClase: true } } }
       }),
       prisma.asistencia.groupBy({
         by: ['horarioId'],
@@ -46,24 +46,20 @@ export const obtenerMetricas = async (req, res) => {
       })
     ]);
 
-    // Procesar asistencias por día para el gráfico
+    // Procesar asistencias por día para el gráfico (Usar la consulta unificada)
     const asistenciasPorDia = Array(7).fill(0);
     const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     
-    const asistenciasDetalle = await prisma.asistencia.findMany({
-      where: { createdAt: { gte: hace4Semanas } },
-      include: { horario: true }
-    });
-
-    asistenciasDetalle.forEach(a => {
-      const dia = a.horario.diaSemana;
+    // Agrupar asistencias de las últimas 4 semanas por día de la semana
+    asistenciasUltimos30Dias.forEach(asist => {
+      const dia = new Date(asist.createdAt).getDay();
       asistenciasPorDia[dia]++;
     });
 
-    const chartAsistenciasDia = diasSemana.map((name, i) => ({
+    const chartAsistencias = diasSemana.map((name, index) => ({
       name,
-      value: asistenciasPorDia[i]
-    })).slice(1).concat(diasSemana[0] === 'Dom' ? [{ name: 'Dom', value: asistenciasPorDia[0] }] : []); // Reordenar para que empiece el lunes si se prefiere
+      value: Math.round(asistenciasPorDia[index] / 4) // Promedio semanal de las últimas 4 semanas
+    }));
 
     // Clases populares con nombres
     const horariosIds = clasesPopulares.map(cp => cp.horarioId);
@@ -91,7 +87,7 @@ export const obtenerMetricas = async (req, res) => {
         totalRecaudado: totalVentas._sum.totalPagado || 0
       },
       charts: {
-        asistenciasPorDia: chartAsistenciasDia,
+        asistenciasPorDia: chartAsistencias,
         clasesPopulares: chartClasesPopulares
       }
     });

@@ -61,6 +61,36 @@ export const obtenerEstadisticasUsuario = async (req, res) => {
 
     const asistenciasPorDia = Object.entries(asistenciasAgrupadasObj).map(([fecha, cantidad]) => ({ fecha, cantidad }));
 
+    // Calcular Racha Actual (Streak)
+    const fechasOrdenadas = [...new Set(asistenciasRecientes.map(a => a.fecha.toISOString().split('T')[0]))]
+      .sort((a, b) => new Date(b) - new Date(a)); // Descendente (más reciente primero)
+
+    let racha = 0;
+    if (fechasOrdenadas.length > 0) {
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      
+      const ultimaAsistencia = new Date(fechasOrdenadas[0]);
+      ultimaAsistencia.setHours(24, 0, 0, 0); // Ajuste para comparar fechas
+      const diffDias = Math.floor((hoy - new Date(fechasOrdenadas[0])) / (1000 * 60 * 60 * 24));
+
+      // Si la última asistencia fue hoy (0) o ayer (1), la racha sigue
+      if (diffDias <= 1) {
+        racha = 1;
+        for (let i = 0; i < fechasOrdenadas.length - 1; i++) {
+          const actual = new Date(fechasOrdenadas[i]);
+          const previa = new Date(fechasOrdenadas[i + 1]);
+          const diff = Math.floor((actual - previa) / (1000 * 60 * 60 * 24));
+          
+          if (diff === 1) {
+            racha++;
+          } else {
+            break;
+          }
+        }
+      }
+    }
+
     const proximoVencimiento = comprasActivas.length > 0 
       ? comprasActivas[0].fechaVencimiento 
       : null;
@@ -72,6 +102,7 @@ export const obtenerEstadisticasUsuario = async (req, res) => {
       asistenciasMesActual,
       asistenciasMesAnterior,
       proximoVencimiento,
+      racha,
       comprasActivas: comprasActivas.map(c => ({
         paquete: c.paquete.titulo,
         creditosRestantes: c.creditosOtorgados - c.creditosConsumidos,
