@@ -27,6 +27,9 @@ function detectarAccion(method, path) {
   if (path.includes('login')) return 'LOGIN';
   if (path.includes('logout')) return 'LOGOUT';
   if (path.includes('checkin')) return 'CHECKIN';
+  if (path.includes('creditos')) return 'CREDITOS';
+  if (path.includes('reactivar')) return 'REACTIVAR';
+  if (path.includes('desactivar')) return 'DESACTIVAR';
   if (path.includes('reserv') && method === 'POST') return 'RESERVA';
   if (path.includes('cancel') || (path.includes('reserv') && method === 'DELETE')) return 'CANCELACION';
   if (path.includes('aprobar')) return 'APROBACION';
@@ -38,9 +41,9 @@ function detectarAccion(method, path) {
 }
 
 function calcularImpacto(accion, entidad, body) {
-  if (['RESERVA', 'CANCELACION', 'CHECKIN', 'COMPRA', 'APROBACION'].includes(accion)) return 'ALTO';
+  if (['RESERVA', 'CANCELACION', 'CHECKIN', 'COMPRA', 'APROBACION', 'CREDITOS', 'REACTIVAR', 'DESACTIVAR'].includes(accion)) return 'ALTO';
   if (['DELETE', 'UPDATE'].includes(accion)) {
-    if (['USUARIO', 'CREDITO', 'RESERVA'].includes(entidad)) return 'ALTO';
+    if (['USUARIO', 'CLASE', 'HORARIO'].includes(entidad)) return 'ALTO';
     return 'MEDIO';
   }
   if (accion === 'CREATE') return 'BAJO';
@@ -102,13 +105,16 @@ export function auditMiddleware() {
       setImmediate(async () => {
         try {
           const impacto = calcularImpacto(accion, entidad, req.body);
-          const observacion = construirObservacion(req, data, accion, entidad);
+          const observacion = construirObservacion(req, data, accion, entidad, estadoAnterior);
 
           let estadoPosterior = null;
-          if (data && (data.id || data.id === 0)) {
-            estadoPosterior = { id: data.id, ...data };
-          } else if (data && data.data && data.data.id) {
-            estadoPosterior = data.data;
+          if (data) {
+            if (data.id !== undefined) estadoPosterior = data;
+            else if (data.usuario?.id !== undefined) estadoPosterior = data.usuario;
+            else if (data.clase?.id !== undefined) estadoPosterior = data.clase;
+            else if (data.reserva?.id !== undefined) estadoPosterior = data.reserva;
+            else if (data.asistencia?.id !== undefined) estadoPosterior = data.asistencia;
+            else if (data.data?.id !== undefined) estadoPosterior = data.data;
           }
 
           await prisma.auditoria.create({
@@ -138,29 +144,43 @@ export function auditMiddleware() {
   };
 }
 
-function construirObservacion(req, data, accion, entidad) {
+function construirObservacion(req, data, accion, entidad, estadoAnterior) {
   const userName = req.user?.nombre ? `${req.user.nombre} ${req.user.apellido}` : 'Sistema';
   const entidadNombre = entidad.toLowerCase();
+  const body = req.body || {};
 
   switch (accion) {
     case 'LOGIN':
-      return `Usuario ${req.body?.dni} inició sesión`;
-    case 'CREATE':
-      return `${userName} creó un nuevo ${entidadNombre}`;
-    case 'UPDATE':
-      return `${userName} modificó ${entidadNombre} ID ${req.params?.id}`;
-    case 'DELETE':
-      return `${userName} eliminó ${entidadNombre} ID ${req.params?.id}`;
+      return `Inicio de sesión: DNI ${body.dni}`;
+    case 'CREDITOS':
+      const prev = estadoAnterior?.creditos || 0;
+      const actual = body.creditos || body.cantidad || 0;
+      const diff = actual - prev;
+      const accionPalabra = diff >= 0 ? 'Aumentó' : 'Disminuyó';
+      return `${userName} ${accionPalabra.toLowerCase()} créditos de ${estadoAnterior?.nombre || 'usuario'} (ID ${req.params?.id}): de ${prev} a ${actual} (${diff >= 0 ? '+' : ''}${diff})`;
+    case 'REACTIVAR':
+      return `${userName} reactivó al usuario ${estadoAnterior?.nombre || ''} (ID ${req.params?.id})`;
+    case 'DESACTIVAR':
+      return `${userName} desactivó al usuario ${estadoAnterior?.nombre || ''} (ID ${req.params?.id})`;
+    case 'APROBACION':
+      return `${userName} aprobó solicitud ID ${req.params?.id}. Nuevo Usuario: ${data?.usuario?.nombre || ''}`;
+    case 'CHECKIN':
+      return `Check-in: ${body.dni || req.params?.id} registró asistencia`;
     case 'RESERVA':
-      return `${userName} realizó una reserva`;
+      const esEspera = data?.estado === 'EN_ESPERA' || data?.reserva?.estado === 'EN_ESPERA';
+      return `${userName} reservó turno ${esEspera ? '(En Lista de Espera)' : '(Confirmado)'}`;
     case 'CANCELACION':
       return `${userName} canceló una reserva`;
-    case 'CHECKIN':
-      return `Check-in registrado para DNI ${req.body?.dni || req.params?.id}`;
     case 'COMPRA':
-      return `${userName} registró una compra de créditos`;
-    case 'APROBACION':
-      return `${userName} aprobó una solicitud de inscripción`;
+      return `${userName} registró compra: ${body.metodoPago || 'Efectivo'}`;
+    case 'CREATE':
+      const detalle = body.nombre || body.titulo || body.email || '';
+      return `${userName} creó ${entidadNombre} ${detalle ? `(${detalle})` : ''}`;
+    case 'UPDATE':
+      const modif = Object.keys(body).filter(k => k !== 'password' && k !== 'password_hash' && k !== 'token').join(', ');
+      return `${userName} modificó ${entidadNombre} ID ${req.params?.id}. Cambios en: ${modif || 'ninguno'}`;
+    case 'DELETE':
+      return `${userName} eliminó ${entidadNombre} ID ${req.params?.id}`;
     default:
       return `${userName} ejecutó ${accion} sobre ${entidadNombre}`;
   }

@@ -125,7 +125,7 @@ export const actualizarCreditos = async (req, res) => {
 
     const usuario = await prisma.usuario.update({
       where: { id: parseInt(id) },
-      data: { creditos: parseInt(creditos) }
+      data: { creditos: Math.max(0, parseInt(creditos)) }
     });
 
     res.json({ message: 'Créditos actualizados', usuario: { id: usuario.id, creditos: usuario.creditos } });
